@@ -38,8 +38,8 @@ RUN set -ex; \
     rm /tmp/micromamba.tar.bz2; \
     mkdir -p $MAMBA_ROOT_PREFIX; \
     micromamba shell init -s bash; \
-    # PyYAML を conda で入れることで、後のビルドエラーを物理的に回避します
-    micromamba create -y -n pyenv -c conda-forge python=3.11 pyyaml; \
+    # PyYAML を conda で入れることで、後のビルドエラーを物理的に回避
+    micromamba create -y -n pyenv -c conda-forge python=3.11 pyyaml=6.0.1; \
     micromamba clean -a -y
 
 # ------------------------------
@@ -52,9 +52,10 @@ RUN micromamba run -n pyenv pip install --no-cache-dir \
 # ------------------------------
 # 5. Gradient & Jupyter Tools
 # ------------------------------
-# --only-binary :all を指定することで、PyYAML等の古いソースビルドを強制的に拒否し、
-# すでに conda で入っている PyYAML を利用させます。
-RUN micromamba run -n pyenv pip install --no-cache-dir --only-binary :all: \
+# 【重要】PyYAML のみバイナリ限定に設定し、他はソースビルドを許容します。
+# これにより、gradient の依存関係(click-completion)も正常にインストールされます。
+RUN micromamba run -n pyenv pip install --no-cache-dir \
+    --only-binary pyyaml \
     jupyterlab==3.6.5 notebook jupyter-server-proxy \
     gradient==2.0.6 \
     xformers==0.0.28.post1 \
