@@ -38,31 +38,24 @@ RUN set -ex; \
     rm /tmp/micromamba.tar.bz2; \
     mkdir -p $MAMBA_ROOT_PREFIX; \
     micromamba shell init -s bash; \
-    micromamba create -y -n pyenv -c conda-forge python=3.11; \
+    # ここで先に pyyaml と gradient を conda でインストールしてビルドを回避
+    micromamba create -y -n pyenv -c conda-forge python=3.11 pyyaml gradient; \
     micromamba clean -a -y
 
 # ------------------------------
-# 4. Fix Build Environment & Install Dependencies
-# ------------------------------
-# エラーの元となる PyYAML のビルド失敗を避けるため、
-# 1. 互換性のあるバージョンの PyYAML を先にバイナリ(Wheel)で入れます。
-# 2. gradient パッケージが要求する古い setuptools/Cython の不整合を回避します。
-RUN micromamba run -n pyenv pip install --no-cache-dir "PyYAML>=6.0.1" Cython
-
-# 次に gradient や jupyter 関連をインストールします。
-# すでに PyYAML が入っているので、gradient のインストール時のビルドエラーが回避されます。
-RUN micromamba run -n pyenv pip install --no-cache-dir \
-    jupyterlab==3.6.5 notebook jupyter-server-proxy \
-    gradient==2.0.6 \
-    xformers==0.0.28.post1 \
-    ninja
-
-# ------------------------------
-# 5. Core ML Libs (PyTorch 2.4.1)
+# 4. Install Core ML Libs (PyTorch 2.4.1)
 # ------------------------------
 RUN micromamba run -n pyenv pip install --no-cache-dir \
     torch==2.4.1+cu124 torchvision==0.19.1+cu124 torchaudio==2.4.1+cu124 \
     --index-url https://download.pytorch.org/whl/cu124
+
+# ------------------------------
+# 5. Jupyter & Other Tools
+# ------------------------------
+RUN micromamba run -n pyenv pip install --no-cache-dir \
+    jupyterlab==3.6.5 notebook jupyter-server-proxy \
+    xformers==0.0.28.post1 \
+    ninja
 
 # ------------------------------
 # 6. Optimization & Nunchaku (SVDQ)
