@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Base Image: CUDA 12.4.1 for Paperspace
+# Base Image: CUDA 12.4.1 for Paperspace (A4000 Optimized)
 # ----------------------------------------------------------------------------
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
@@ -11,14 +11,14 @@ LABEL maintainer="kgrren"
 ENV DEBIAN_FRONTEND=noninteractive \
     SHELL=/bin/bash \
     MAMBA_ROOT_PREFIX=/opt/conda \
-    # パス設定：pyenv環境を最優先に。これでデフォルトコマンドがこの環境を叩くようになります
+    # パス設定：pyenv環境を最優先。これでデフォルトコマンドがこの環境を叩くようになります
     PATH=/opt/conda/envs/pyenv/bin:/opt/conda/bin:$PATH \
     CUDA_HOME=/usr/local/cuda \
     TORCH_CUDA_ARCH_LIST="8.6" \
     FORCE_CUDA="1"
 
 # ------------------------------
-# 2. System Packages
+# 2. System Packages (FFmpeg等、Forge Neoに必要なツールを含む)
 # ------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl git nano vim unzip zip \
@@ -43,19 +43,21 @@ RUN set -ex; \
     micromamba clean -a -y
 
 # ------------------------------
-# 4. Install Core ML Libs (pyenv環境へ)
+# 4. Install Core ML Libs & Paperspace Agent
 # ------------------------------
+# Paperspaceコンソールでの操作を有効にするため 'gradient' を追加
 RUN micromamba run -n pyenv pip install \
     torch==2.4.1+cu124 torchvision==0.19.1+cu124 torchaudio==2.4.1+cu124 \
     --index-url https://download.pytorch.org/whl/cu124
 
 RUN micromamba run -n pyenv pip install \
-    jupyterlab notebook jupyter-server-proxy \
+    jupyterlab==3.6.5 notebook jupyter-server-proxy \
+    gradient==2.0.6 \
     xformers==0.0.28.post1 \
     ninja
 
 # ------------------------------
-# 5. Build Tools & Optimization
+# 5. Build Tools & Optimization (A4000用)
 # ------------------------------
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv
@@ -64,7 +66,13 @@ RUN micromamba run -n pyenv pip install flash-attn --no-build-isolation
 RUN micromamba run -n pyenv pip install sageattention
 
 # ------------------------------
-# 6. Final Setup
+# 6. Forge Neo Directory Preparation (Optional)
+# ------------------------------
+# あらかじめディレクトリを用意しておくことで、マウント時の権限エラーを抑制します
+RUN mkdir -p /notebooks /tmp/sd/models
+
+# ------------------------------
+# 7. Final Setup
 # ------------------------------
 COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
 
@@ -72,12 +80,19 @@ WORKDIR /notebooks
 COPY scripts/entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# ポート開放
-EXPOSE 8888
+# Paperspace IDEの標準ポート
+EXPOSE 8888 7860
 
-# 参考コードに合わせた Entrypoint 形式
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-# Paperspaceのデフォルト設定に干渉しないよう、CMDは最小限にする
-# これにより、Paperspace側で指定されるデフォルトコマンドが正しく引き継がれます
-CMD ["jupyter", "lab", "--allow-root", "--ip=0.0.0.0", "--port=8888", "--no-browser"]
+# Paperspaceコンソールの挙動に合わせ、信頼済みヘッダーとオリジン許可を追加
+CMD ["jupyter", "lab", \
+     "--allow-root", \
+     "--ip=0.0.0.0", \
+     "--port=8888", \
+     "--no-browser", \
+     "--ServerApp.trust_xheaders=True", \
+     "--ServerApp.disable_check_xsrf=False", \
+     "--ServerApp.allow_remote_access=True", \
+     "--ServerApp.allow_origin='*'", \
+     "--ServerApp.allow_credentials=True"]
