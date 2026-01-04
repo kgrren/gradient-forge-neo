@@ -6,6 +6,11 @@
 # ----------------------------------------------------------------------------
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
+# BuildKit platform args
+ARG TARGETARCH
+ARG TARGETOS
+
+
 LABEL maintainer="kgrren"
 
 # ------------------------------
@@ -37,7 +42,15 @@ RUN set -eux;     apt-get update;     apt-get install -y --no-install-recommends
 # ------------------------------
 # micromamba
 # ------------------------------
-RUN set -eux;     arch="$(uname -m)";     case "$arch" in       x86_64) mamba_arch="linux-64" ;;       aarch64|arm64) mamba_arch="linux-aarch64" ;;       *) echo "Unsupported arch: $arch" >&2; exit 1 ;;     esac;     curl -L "https://micro.mamba.pm/api/micromamba/${mamba_arch}/latest" -o /usr/local/bin/micromamba;     chmod +x /usr/local/bin/micromamba;     micromamba --version
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) mamba_arch="linux-64" ;; \
+      arm64) mamba_arch="linux-aarch64" ;; \
+      *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -Ls "https://micro.mamba.pm/api/micromamba/${mamba_arch}/latest" | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba; \
+    chmod +x /usr/local/bin/micromamba; \
+    /usr/local/bin/micromamba --version
 
 # ------------------------------
 # Create a non-root user (Paperspace-friendly)
