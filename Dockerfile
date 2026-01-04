@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------
-# 3. Micromamba & Python 3.11 + PyYAML (Pre-built)
+# 3. Micromamba & Python 3.11 + PyYAML (最新の6系を事前導入)
 # ------------------------------
 RUN set -ex; \
     arch=$(uname -m); \
@@ -38,7 +38,7 @@ RUN set -ex; \
     rm /tmp/micromamba.tar.bz2; \
     mkdir -p $MAMBA_ROOT_PREFIX; \
     micromamba shell init -s bash; \
-    # PyYAML を conda で入れることで、後のビルドエラーを物理的に回避
+    # Python3.11で確実に動く PyYAML 6.0.1 を conda で先に入れます
     micromamba create -y -n pyenv -c conda-forge python=3.11 pyyaml=6.0.1; \
     micromamba clean -a -y
 
@@ -50,16 +50,19 @@ RUN micromamba run -n pyenv pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cu124
 
 # ------------------------------
-# 5. Gradient & Jupyter Tools
+# 5. Gradient & Jupyter Tools (ビルドエラーの核心部)
 # ------------------------------
-# 【重要】PyYAML のみバイナリ限定に設定し、他はソースビルドを許容します。
-# これにより、gradient の依存関係(click-completion)も正常にインストールされます。
+# gradient 2.0.6 は PyYAML 5.x を要求してエラーになるため、
+# 1. 依存関係を無視して gradient をインストール (--no-deps)
+# 2. gradient が必要とする他の主要ライブラリを手動で補完
 RUN micromamba run -n pyenv pip install --no-cache-dir \
-    --only-binary pyyaml \
     jupyterlab==3.6.5 notebook jupyter-server-proxy \
-    gradient==2.0.6 \
     xformers==0.0.28.post1 \
     ninja
+
+RUN micromamba run -n pyenv pip install --no-cache-dir --no-deps gradient==2.0.6 && \
+    micromamba run -n pyenv pip install --no-cache-dir \
+    "click<9.0" "requests<3.0" marshmallow attrs
 
 # ------------------------------
 # 6. Optimization & Nunchaku (SVDQ)
@@ -67,11 +70,8 @@ RUN micromamba run -n pyenv pip install --no-cache-dir \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv
 
-# SageAttention & FlashAttention
 RUN micromamba run -n pyenv pip install --no-cache-dir flash-attn --no-build-isolation
 RUN micromamba run -n pyenv pip install --no-cache-dir sageattention
-
-# Nunchaku のインストール
 RUN micromamba run -n pyenv pip install --no-cache-dir nunchaku --no-build-isolation
 
 # ------------------------------
