@@ -1,11 +1,9 @@
-c = get_config()
-
+# jupyter_server_config.py の修正案
 c.ServerProxy.servers = {
     'forge': {
-        'command': ['echo', 'Forge Neo started'],
+        'command': ['echo', 'Forge Neo should be started from Notebook'],
         'port': 7860,
-        # absolute_url を True に変更し、Jupyter側にベースパスを維持させます
-        'absolute_url': True, 
+        'absolute_url': False, # これをFalseにする場合はForge側で--subpathが必要
         'launcher_entry': {
             'enabled': True,
             'title': 'Forge Neo',
@@ -13,11 +11,10 @@ c.ServerProxy.servers = {
     }
 }
 
-# Paperspace/Gradioの通信を許可するための設定を追加
+# WebUIの表示がブロックされるのを防ぐための設定を追加
 c.ServerApp.allow_origin = '*'
 c.ServerApp.tornado_settings = {
     'headers': {
-        'Content-Security-Policy': "frame-ancestors 'self' *",
-        'Access-Control-Allow-Origin': '*'
+        'Content-Security-Policy': "frame-ancestors 'self' *"
     }
 }
