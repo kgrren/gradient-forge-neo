@@ -1,14 +1,18 @@
-# Minimal Jupyter Server config for Paperspace + Server Proxy
-# Avoid touching base_url/token/xsrf here; those are controlled via CLI in start-jupyter.
+# Jupyter Server configuration for Paperspace Gradient
+# Adds a Launcher entry to start Forge Neo via jupyter-server-proxy.
+
+c = get_config()  # noqa
 
 c.ServerProxy.servers = {
-  "forge_neo": {
-    "command": ["/usr/local/bin/start-forge-neo"],
-    "timeout": 120,
-    "launcher_entry": {
-      "title": "Stable Diffusion Forge Neo (7860)",
-      "icon_path": ""
-    },
-    "absolute_url": False,
-  }
+    "forge-neo": {
+        "command": ["/usr/local/bin/start-forge.sh"],
+        "timeout": 60,
+        "launcher_entry": {
+            "title": "Stable Diffusion Forge Neo",
+            "icon_path": "",
+        },
+        "port": 7860,
+        "absolute_url": False,
+        "new_browser_tab": True,
+    }
 }
