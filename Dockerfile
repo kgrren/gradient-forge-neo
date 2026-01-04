@@ -1,101 +1,100 @@
-# ----------------------------------------------------------------------------
-# Paperspace Gradient Notebook image for Stable Diffusion Forge Neo
-# - Base: NVIDIA CUDA 12.4 + cuDNN (Ubuntu 22.04)
-# - Env manager: micromamba
-# - Default: launches JupyterLab on port 8888 (Forge can be started on 7860)
-# ----------------------------------------------------------------------------
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+# syntax=docker/dockerfile:1
 
-# BuildKit platform args
-ARG TARGETARCH
-ARG TARGETOS
+# Paperspace Gradient custom container requirements:
+# - Image must include Python and JupyterLab
+# - Jupyter must listen on 0.0.0.0:8888
+# - /notebooks is the expected working directory
 
+ARG CUDA_IMAGE=nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
+FROM ${CUDA_IMAGE}
 
-LABEL maintainer="kgrren"
-
-# ------------------------------
-# Build args / runtime env
-# ------------------------------
-ARG PYTHON_VERSION=3.11
-ARG NB_USER=mambauser
-ARG NB_UID=1000
-ARG NB_GID=1000
-
-# Forge source (override as needed)
-ARG FORGE_REPO=https://github.com/lllyasviel/stable-diffusion-webui-forge.git
-ARG FORGE_REF=master
-
-# Optional extra deps that may fail to build on some setups
-ARG INSTALL_FLASH_ATTN=0
-ARG INSTALL_SAGEATTENTION=0
-
-ENV DEBIAN_FRONTEND=noninteractive     SHELL=/bin/bash     MAMBA_ROOT_PREFIX=/opt/conda     MAMBA_USER=${NB_USER}     NB_USER=${NB_USER}     NB_UID=${NB_UID}     NB_GID=${NB_GID}     CUDA_HOME=/usr/local/cuda     PIP_NO_CACHE_DIR=1     PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1     NVIDIA_VISIBLE_DEVICES=all     NVIDIA_DRIVER_CAPABILITIES=compute,utility
-
-# Put micromamba + env bin on PATH (env path added after env creation too)
-ENV PATH=/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Etc/UTC
 
 # ------------------------------
 # OS packages
 # ------------------------------
-RUN set -eux;     apt-get update;     apt-get install -y --no-install-recommends       ca-certificates curl wget git       bzip2 xz-utils       tini       build-essential pkg-config       libgl1 libglib2.0-0       iproute2       openssh-client     ;     rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates curl git wget \
+      ffmpeg \
+      tini gosu \
+      bash \
+      software-properties-common \
+      build-essential pkg-config \
+      libgl1 libglib2.0-0 libsm6 libxext6 libxrender1; \
+    rm -rf /var/lib/apt/lists/*
 
 # ------------------------------
-# micromamba
+# Python 3.11 (Forge Neo recommends 3.11.x)
 # ------------------------------
 RUN set -eux; \
-    case "${TARGETARCH}" in \
-      amd64) mamba_arch="linux-64" ;; \
-      arm64) mamba_arch="linux-aarch64" ;; \
-      *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    curl -Ls "https://micro.mamba.pm/api/micromamba/${mamba_arch}/latest" | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba; \
-    chmod +x /usr/local/bin/micromamba; \
-    /usr/local/bin/micromamba --version
+    add-apt-repository ppa:deadsnakes/ppa; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      python3.11 python3.11-venv python3.11-dev \
+      python3-pip; \
+    rm -rf /var/lib/apt/lists/*; \
+    python3.11 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Prefer python3 -> python3.11
+RUN set -eux; \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1; \
+    python3 --version
 
 # ------------------------------
-# Create a non-root user (Paperspace-friendly)
+# JupyterLab + server proxy (Launcher integration)
 # ------------------------------
-RUN set -eux;     groupadd --gid "${NB_GID}" "${NB_USER}" || true;     useradd  --uid "${NB_UID}" --gid "${NB_GID}" -m -s /bin/bash "${NB_USER}" || true;     mkdir -p /notebooks /workspace /opt/forge /opt/conda;     chown -R "${NB_UID}:${NB_GID}" /notebooks /workspace /opt/forge /opt/conda
+RUN set -eux; \
+    python3 -m pip install --no-cache-dir \
+      jupyterlab==4.* \
+      jupyter-server-proxy==4.* \
+      jupyterlab-git==0.50.* \
+      notebook==7.*
 
 # ------------------------------
-# Create conda env + Jupyter tooling
+# Forge Neo source (default repo/ref can be overridden at build time)
 # ------------------------------
-RUN set -eux;     micromamba create -y -n pyenv -c conda-forge       "python=${PYTHON_VERSION}"       pip       jupyterlab       jupyter-server-proxy       nodejs       git     ;     micromamba clean -a -y
+ARG FORGE_REPO=https://github.com/Haoming02/sd-webui-forge-classic.git
+ARG FORGE_REF=neo
+ENV FORGE_HOME=/opt/sd-webui-forge-neo
 
-# Ensure env bin is preferred
-ENV PATH=/opt/conda/envs/pyenv/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-# ------------------------------
-# uv (optional but handy)
-# ------------------------------
-RUN set -eux;     curl -LsSf https://astral.sh/uv/install.sh | sh;     mv /root/.local/bin/uv /usr/local/bin/uv || true;     uv --version || true
+RUN set -eux; \
+    mkdir -p /opt; \
+    git clone --depth 1 --branch "${FORGE_REF}" "${FORGE_REPO}" "${FORGE_HOME}"
 
 # ------------------------------
-# Fetch Forge sources (kept in image; you can also mount over /opt/forge)
+# Runtime user strategy
+# - Paperspace may run containers with a non-root UID
+# - /notebooks may be mounted with arbitrary ownership
+# We do dynamic UID/GID mapping at container start.
 # ------------------------------
-RUN set -eux;     git clone --depth 1 --branch "${FORGE_REF}" "${FORGE_REPO}" /opt/forge || (       echo "WARN: failed to clone Forge (repo/ref). Build will continue; mount your own sources at /opt/forge." >&2;       mkdir -p /opt/forge     );     chown -R "${NB_UID}:${NB_GID}" /opt/forge
+ENV NB_USER=gradient \
+    NB_UID=1000 \
+    NB_GID=1000
+
+# Precreate common paths (ownership fixed at runtime)
+RUN set -eux; \
+    mkdir -p /notebooks /workspace; \
+    chmod 777 /notebooks /workspace; \
+    mkdir -p /opt/conda
 
 # ------------------------------
-# Optional performance deps (best-effort)
+# Config + scripts
 # ------------------------------
-RUN set -eux;     if [ "${INSTALL_FLASH_ATTN}" = "1" ]; then       micromamba run -n pyenv python -m pip install --upgrade pip;       micromamba run -n pyenv pip install flash-attn --no-build-isolation || echo "WARN: flash-attn install failed (continuing)";     fi;     if [ "${INSTALL_SAGEATTENTION}" = "1" ]; then       micromamba run -n pyenv pip install sageattention || echo "WARN: sageattention install failed (continuing)";     fi
-
-# ------------------------------
-# Jupyter configuration + helper scripts
-# ------------------------------
-COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY scripts/start-jupyter.sh /usr/local/bin/start-jupyter.sh
 COPY scripts/start-forge.sh /usr/local/bin/start-forge.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/start-forge.sh
+COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
 
-# ------------------------------
-# Runtime
-# ------------------------------
-WORKDIR /notebooks
+RUN set -eux; \
+    chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/start-jupyter.sh /usr/local/bin/start-forge.sh
+
 EXPOSE 8888 7860
 
-# Run as non-root by default (Paperspace expects this)
-USER ${NB_USER}
+WORKDIR /notebooks
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--ServerApp.token=", "--ServerApp.password=", "--ServerApp.allow_origin=*"]
+# tini as PID1, then our entrypoint (which will exec start-jupyter by default)
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/local/bin/start-jupyter.sh"]
