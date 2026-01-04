@@ -1,19 +1,18 @@
-c = get_config()
+# Jupyter Server configuration for Paperspace Gradient
+# Adds a Launcher entry to start Forge Neo via jupyter-server-proxy.
+
+c = get_config()  # noqa
 
 c.ServerProxy.servers = {
-    "forge": {
-        "command": ["/bin/bash", "-lc", "micromamba run -n pyenv /usr/local/bin/start-forge.sh"],
-        "port": 7860,
-        "timeout": 300,
-        "absolute_url": False,
+    "forge-neo": {
+        "command": ["/usr/local/bin/start-forge.sh"],
+        "timeout": 60,
         "launcher_entry": {
-            "enabled": True,
-            "title": "Forge Neo (Port 7860)",
+            "title": "Stable Diffusion Forge Neo",
+            "icon_path": "",
         },
+        "port": 7860,
+        "absolute_url": False,
+        "new_browser_tab": True,
     }
 }
-
-# Paperspace relies on platform auth; disable Jupyter token/password inside the container.
-c.ServerApp.token = ""
-c.ServerApp.password = ""
-c.ServerApp.disable_check_xsrf = True
