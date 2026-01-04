@@ -1,24 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Simple launcher for Forge from within the container.
-# - You can call this from a terminal: `start-forge.sh`
-# - Or via Jupyter "Launcher" if configured through jupyter_server_config.py
+FORGE_HOME="${FORGE_HOME:-/opt/sd-webui-forge-neo}"
+NOTEBOOK_DIR="${NOTEBOOK_DIR:-/notebooks}"
 
-FORGE_DIR="${FORGE_DIR:-/opt/forge}"
-PORT="${FORGE_PORT:-7860}"
+# Default model folders live under /notebooks/models so they persist in the workspace volume.
+MODEL_REF="${MODEL_REF:-${NOTEBOOK_DIR}/models}"
+OUTPUT_DIR="${OUTPUT_DIR:-${NOTEBOOK_DIR}/outputs}"
 
-cd "${FORGE_DIR}"
+mkdir -p "${MODEL_REF}" "${OUTPUT_DIR}"
 
-# Prefer Forge's own launcher if present.
-if [ -f "src/launch.py" ]; then
-  exec python src/launch.py --listen --port "${PORT}"
+cd "${FORGE_HOME}"
+
+# Forge Neo supports many flags. We keep defaults safe for A4000:
+# - listen on 0.0.0.0 so server-proxy can reach it
+# - store outputs in the mounted volume
+ARGS=(
+  --listen
+  --port 7860
+  --api
+  --model-ref "${MODEL_REF}"
+  --outdir-txt2img-samples "${OUTPUT_DIR}/txt2img"
+  --outdir-img2img-samples "${OUTPUT_DIR}/img2img"
+  --outdir-extras-samples "${OUTPUT_DIR}/extras"
+  --outdir-grids "${OUTPUT_DIR}/grids"
+)
+
+# Allow user overrides via FORGE_ARGS environment variable
+if [ -n "${FORGE_ARGS:-}" ]; then
+  # shellcheck disable=SC2206
+  EXTRA_ARGS=(${FORGE_ARGS})
+  ARGS+=("${EXTRA_ARGS[@]}")
+fi
+
+# Launch script location differs across forks; try a few.
+if [ -f "webui.py" ]; then
+  exec python3 webui.py "${ARGS[@]}"
 elif [ -f "launch.py" ]; then
-  exec python launch.py --listen --port "${PORT}"
-elif [ -f "webui.sh" ]; then
-  exec bash webui.sh --listen --port "${PORT}"
+  exec python3 launch.py "${ARGS[@]}"
+elif [ -f "src/launch.py" ]; then
+  exec python3 src/launch.py "${ARGS[@]}"
 else
-  echo "Forge entrypoint not found in ${FORGE_DIR}."
-  echo "Set FORGE_DIR to your repo directory, or mount your sources at /opt/forge."
+  echo "ERROR: Could not find Forge launch script in ${FORGE_HOME}" >&2
+  ls -la
   exit 1
 fi
