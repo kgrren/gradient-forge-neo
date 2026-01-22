@@ -65,41 +65,39 @@ RUN micromamba run -n pyenv pip install --no-cache-dir --no-deps gradient==2.0.6
     "click<9.0" "requests<3.0" marshmallow attrs
 
 # ------------------------------
-# 6. Optimization & Nunchaku (SVDQ) - FIXED
+# 6. Optimization & Nunchaku (SVDQ) - FIXED v2
 # ------------------------------
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv
 
-# 【重要】ビルドの前提となるツール群を確実に最新化します
-# metadata-generation-failed はこれらが古かったり無かったりすると発生します
-RUN micromamba run -n pyenv pip install --no-cache-dir --upgrade \
-    pip setuptools wheel packaging ninja numpy
+# 1. ビルドツール (CMake, Ninja) をシステムレベルで使えるようにインストール
+# これがないと setup.py が動き出す前に metadata エラーで死にます
+RUN micromamba run -n pyenv pip install --no-cache-dir \
+    cmake ninja packaging setuptools wheel numpy
 
-# 【Flash Attention】
-# ソースからビルドするとメモリ不足や長時間化の原因になるため、
-# Dao-AILab公式のビルド済みWheel (Torch 2.4 / CUDA 12.x / Python 3.11用) を利用します
+# 2. Flash Attention (ビルド時間短縮のためWheelを使用)
 RUN micromamba run -n pyenv pip install --no-cache-dir \
     https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu123torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl
 
-# 【SageAttention】
-# 依存関係として flash-attn を要求しますが、上記で入れたのでスムーズに入ります
+# 3. SageAttention
 RUN micromamba run -n pyenv pip install --no-cache-dir sageattention
 
-# 【Nunchaku】
-# git+https でのインストールは metadata エラーが出やすいため、
-# 確実に clone してからローカルでビルド・インストールします
+# 4. Nunchaku (手動ビルド・インストール)
 WORKDIR /tmp/nunchaku_build
-RUN git clone https://github.com/mit-han-lab/nunchaku.git . && \
-    # 依存関係だけ先に解消 (Torchの上書きを防ぐため --no-deps で本体を入れる前の準備)
+
+# 【重要】 --recursive をつけてサブモジュール(cutlass等)も全て持ってくる
+RUN git clone --recursive https://github.com/mit-han-lab/nunchaku.git . && \
+    # 依存関係のインストール (Torchのバージョンを変えないよう注意)
     micromamba run -n pyenv pip install --no-cache-dir \
     einops accelerate peft diffusers transformers sentencepiece && \
-    # A4000 (SM86) 用にターゲットを絞ってビルド
+    # A4000 (SM86) 用の設定
     export TORCH_CUDA_ARCH_LIST="8.6" && \
+    # ビルド実行
     micromamba run -n pyenv pip install . --no-deps --no-build-isolation && \
     # 掃除
     cd / && rm -rf /tmp/nunchaku_build
 
-# 動作確認用
+# 動作確認
 RUN micromamba run -n pyenv python -c "import nunchaku; print('Nunchaku Installed Successfully')"
 
 # ------------------------------
