@@ -65,40 +65,14 @@ RUN micromamba run -n pyenv pip install --no-cache-dir --no-deps gradient==2.0.6
     "click<9.0" "requests<3.0" marshmallow attrs
 
 # ------------------------------
-# 6. Optimization & Nunchaku (SVDQ) - FIXED v2
+# 6. Optimization & Nunchaku (SVDQ)
 # ------------------------------
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv
 
-# 1. ビルドツール (CMake, Ninja) をシステムレベルで使えるようにインストール
-# これがないと setup.py が動き出す前に metadata エラーで死にます
-RUN micromamba run -n pyenv pip install --no-cache-dir \
-    cmake ninja packaging setuptools wheel numpy
-
-# 2. Flash Attention (ビルド時間短縮のためWheelを使用)
-RUN micromamba run -n pyenv pip install --no-cache-dir \
-    https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu123torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl
-
-# 3. SageAttention
+RUN micromamba run -n pyenv pip install --no-cache-dir flash-attn --no-build-isolation
 RUN micromamba run -n pyenv pip install --no-cache-dir sageattention
-
-# 4. Nunchaku (手動ビルド・インストール)
-WORKDIR /tmp/nunchaku_build
-
-# 【重要】 --recursive をつけてサブモジュール(cutlass等)も全て持ってくる
-RUN git clone --recursive https://github.com/mit-han-lab/nunchaku.git . && \
-    # 依存関係のインストール (Torchのバージョンを変えないよう注意)
-    micromamba run -n pyenv pip install --no-cache-dir \
-    einops accelerate peft diffusers transformers sentencepiece && \
-    # A4000 (SM86) 用の設定
-    export TORCH_CUDA_ARCH_LIST="8.6" && \
-    # ビルド実行
-    micromamba run -n pyenv pip install . --no-deps --no-build-isolation && \
-    # 掃除
-    cd / && rm -rf /tmp/nunchaku_build
-
-# 動作確認
-RUN micromamba run -n pyenv python -c "import nunchaku; print('Nunchaku Installed Successfully')"
+RUN micromamba run -n pyenv pip install --no-cache-dir nunchaku --no-build-isolation
 
 # ------------------------------
 # 7. Final Setup
