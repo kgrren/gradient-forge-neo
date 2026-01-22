@@ -72,7 +72,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 
 RUN micromamba run -n pyenv pip install --no-cache-dir flash-attn --no-build-isolation
 RUN micromamba run -n pyenv pip install --no-cache-dir sageattention
-RUN micromamba run -n pyenv pip install --no-cache-dir nunchaku --no-build-isolation
+RUN micromamba run -n pyenv pip install --no-cache-dir git+https://github.com/mit-han-lab/nunchaku.git
 
 # ------------------------------
 # 7. Final Setup
