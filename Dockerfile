@@ -46,12 +46,12 @@ RUN set -ex; \
     micromamba clean -a -y
 
 # ------------------------------
-# 4. uv を使った高速インストール (Core ML & Jupyter)
+# 4. uv を使った高速インストール (Python 3.13 対応)
 # ------------------------------
-# uv pip install は標準の pip install よりも数倍〜数十倍高速です
+# バージョンを固定せず、3.13に対応した最新の2.5系を探させます
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
-    torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 \
-    --index-url https://download.pytorch.org/whl/cu124
+    torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu121
 
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
     jupyterlab==3.6.5 notebook jupyter-server-proxy \
