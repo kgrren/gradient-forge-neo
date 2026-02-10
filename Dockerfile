@@ -42,7 +42,7 @@ RUN set -ex; \
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv; \
     # Python環境の作成 (PyYAMLの競合回避のため、ここだけはmicromambaで管理)
-    micromamba create -y -n pyenv -c conda-forge python=3.11 pyyaml=6.0.1; \
+    micromamba create -y -n pyenv -c conda-forge python=3.13 pyyaml=6.0.1; \
     micromamba clean -a -y
 
 # ------------------------------
@@ -50,12 +50,12 @@ RUN set -ex; \
 # ------------------------------
 # uv pip install は標準の pip install よりも数倍〜数十倍高速です
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
-    torch==2.4.1+cu124 torchvision==0.19.1+cu124 torchaudio==2.4.1+cu124 \
+    torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 \
     --index-url https://download.pytorch.org/whl/cu124
 
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
     jupyterlab==3.6.5 notebook jupyter-server-proxy \
-    xformers==0.0.28.post1 \
+    xformers==0.0.28.post3 \
     ninja
 
 # ------------------------------
