@@ -38,24 +38,24 @@ RUN set -ex; \
     rm /tmp/micromamba.tar.bz2; \
     mkdir -p $MAMBA_ROOT_PREFIX; \
     micromamba shell init -s bash; \
-    # uvの導入
+    # uvを先に導入して、以降のインストールで活用する
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv; \
-    # Python 3.13 を作成 (pyyamlは個別にuvで入れるかForgeに任せる)
-    micromamba create -y -n pyenv -c conda-forge python=3.13; \
+    # Python環境の作成 (PyYAMLの競合回避のため、ここだけはmicromambaで管理)
+    micromamba create -y -n pyenv -c conda-forge python=3.11 pyyaml=6.0.1; \
     micromamba clean -a -y
 
 # ------------------------------
-# 4. uv を使った高速インストール (Python 3.13 対応)
+# 4. uv を使った高速インストール (Core ML & Jupyter)
 # ------------------------------
-# バージョンを固定せず、3.13に対応した最新の2.5系を探させます
+# uv pip install は標準の pip install よりも数倍〜数十倍高速です
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
-    torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cu121
+    torch==2.4.1+cu124 torchvision==0.19.1+cu124 torchaudio==2.4.1+cu124 \
+    --index-url https://download.pytorch.org/whl/cu124
 
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
     jupyterlab==3.6.5 notebook jupyter-server-proxy \
-    xformers==0.0.28.post3 \
+    xformers==0.0.28.post1 \
     ninja
 
 # ------------------------------
@@ -67,11 +67,16 @@ RUN uv pip install --no-cache --no-deps -p /opt/conda/envs/pyenv/bin/python grad
     "click<9.0" "requests<3.0" marshmallow attrs
 
 # ------------------------------
-# 6. Optimization (Flash-Attn 等)
+# 6. Optimization (Flash-Attn 等) & CLIP Fix
 # ------------------------------
-# flash-attn などのビルドが必要なものも uv は効率的に処理します
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python flash-attn --no-build-isolation
 RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python sageattention
+
+# --- CLIPの事前インストールを追加 ---
+# --no-build-isolation を付与することで、ビルド時の pkg_resources エラーを回避します
+RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
+    https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip \
+    --no-build-isolation
 
 # ------------------------------
 # 7. Final Setup
