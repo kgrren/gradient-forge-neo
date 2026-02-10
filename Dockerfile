@@ -38,11 +38,11 @@ RUN set -ex; \
     rm /tmp/micromamba.tar.bz2; \
     mkdir -p $MAMBA_ROOT_PREFIX; \
     micromamba shell init -s bash; \
-    # uvを先に導入して、以降のインストールで活用する
+    # uvの導入
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv; \
-    # Python環境の作成 (PyYAMLの競合回避のため、ここだけはmicromambaで管理)
-    micromamba create -y -n pyenv -c conda-forge python=3.13 pyyaml=6.0.1; \
+    # Python 3.13 を作成 (pyyamlは個別にuvで入れるかForgeに任せる)
+    micromamba create -y -n pyenv -c conda-forge python=3.13; \
     micromamba clean -a -y
 
 # ------------------------------
