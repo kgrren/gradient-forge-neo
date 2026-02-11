@@ -74,7 +74,10 @@ RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python sageattention
 
 # --- CLIPの事前インストールを追加 ---
 # --no-build-isolation を付与することで、ビルド時の pkg_resources エラーを回避します
-RUN /opt/conda/envs/pyenv/bin/python -m pip install --no-cache-dir \
+# 1. まず pkg_resources を含む setuptools を uv で入れる
+RUN uv pip install -p /opt/conda/envs/pyenv/bin/python "setuptools<70.0.0"
+# 2. その環境を使って CLIP をビルド・インストールする
+RUN uv pip install --no-cache -p /opt/conda/envs/pyenv/bin/python \
     https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip \
     --no-build-isolation
 
